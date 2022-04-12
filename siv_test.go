@@ -14,9 +14,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/quick"
 
+	rand "github.com/ericlagergren/saferand"
 	"github.com/ericlagergren/siv/internal/subtle"
 )
+
+func randbuf(n int) []byte {
+	buf := make([]byte, n)
+	if _, err := rand.Read(buf); err != nil {
+		panic(err)
+	}
+	return buf
+}
 
 func disableAsm(t *testing.T) {
 	old := haveAsm
@@ -24,6 +34,21 @@ func disableAsm(t *testing.T) {
 	t.Cleanup(func() {
 		haveAsm = old
 	})
+}
+
+// runTests runs both generic and assembly tests.
+func runTests(t *testing.T, fn func(t *testing.T)) {
+	t.Run("generic", func(t *testing.T) {
+		t.Helper()
+		disableAsm(t)
+		fn(t)
+	})
+	if haveAsm {
+		t.Run("assembly", func(t *testing.T) {
+			t.Helper()
+			fn(t)
+		})
+	}
 }
 
 // loadVectors reads test vectors from testdata/nameinto v.
@@ -122,22 +147,14 @@ type Test struct {
 func TestWycheproof(t *testing.T) {
 	var v Test
 	loadVectors(t, &v, "aes_gcm_siv_test.json")
-
-	if haveAsm {
-		t.Run("assembly", func(t *testing.T) {
-			disableAsm(t)
-			testWycheproof(t, v)
-		})
-	}
-	t.Run("generic", func(t *testing.T) {
-		disableAsm(t)
+	runTests(t, func(t *testing.T) {
 		testWycheproof(t, v)
 	})
 }
 
 func testWycheproof(t *testing.T, v Test) {
 	for _, g := range v.Groups {
-		name := fmt.Sprintf("key=%d", g.KeySize)
+		name := fmt.Sprintf("%d", g.KeySize)
 		t.Run(name, func(t *testing.T) {
 			for _, tc := range g.Vectors {
 				aead, err := NewGCM(tc.Key)
@@ -294,28 +311,18 @@ func unhex(t *testing.T, s string) []byte {
 
 // TestRFC tests the test vectors from [rfc8452].
 func TestRFC(t *testing.T) {
-	if haveAsm {
-		t.Run("assembly", func(t *testing.T) {
-			disableAsm(t)
-			testRFCs(t)
-		})
-	}
-	t.Run("generic", func(t *testing.T) {
-		disableAsm(t)
-		testRFCs(t)
-	})
-}
-
-func testRFCs(t *testing.T) {
 	for _, name := range []string{
 		"rfc8452_128.txt",
 		"rfc8452_256.txt",
 		"rfc8452_256_wrap.txt",
 	} {
 		t.Run(name, func(t *testing.T) {
-			for i, tc := range parseVectors(t, name) {
-				testRFC(t, i, tc)
-			}
+			vecs := parseVectors(t, name)
+			runTests(t, func(t *testing.T) {
+				for i, v := range vecs {
+					testRFC(t, i, v)
+				}
+			})
 		})
 	}
 }
@@ -359,6 +366,131 @@ func testRFC(t *testing.T, i int, tc testVector) {
 			t.Fatalf("#%d: expected %x, got %x", i, tc.plaintext, plaintext)
 		}
 	}
+}
+
+// TestOverlap tests Seal and Open with overlapping buffers.
+func TestOverlap(t *testing.T) {
+	runTests(t, func(t *testing.T) {
+		t.Run("128", func(t *testing.T) {
+			testOverlap(t, 16)
+		})
+		t.Run("256", func(t *testing.T) {
+			testOverlap(t, 32)
+		})
+	})
+}
+
+func testOverlap(t *testing.T, keySize int) {
+	args := func() (key, nonce, plaintext, aad []byte) {
+		type arg struct {
+			buf  []byte
+			ptr  *[]byte
+			i, j int
+		}
+		const (
+			// max = 7789
+			max = 33
+		)
+		args := []arg{
+			{buf: randbuf(keySize), ptr: &key},
+			{buf: randbuf(NonceSize), ptr: &nonce},
+			{buf: randbuf(rand.Intn(max)), ptr: &plaintext},
+			{buf: randbuf(rand.Intn(max)), ptr: &aad},
+		}
+		var buf []byte
+		for i := range rand.Perm(len(args)) {
+			a := &args[i]
+			a.i = len(buf)
+			buf = append(buf, a.buf...)
+			a.j = len(buf)
+		}
+		buf = buf[:len(buf):len(buf)]
+		for i := range args {
+			a := &args[i]
+			*a.ptr = buf[a.i:a.j:a.j]
+		}
+		return
+	}
+	for i := 0; i < 1000; i++ {
+		key, nonce, plaintext, aad := args()
+		if len(plaintext) > TagSize && rand.Intn(2)%2 != 0 {
+			plaintext = plaintext[:len(plaintext)-TagSize]
+		}
+		ciphertext := plaintext[:0]
+		orig := dup(plaintext)
+
+		aead, err := NewGCM(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		want := aead.Seal(nil, dup(nonce), dup(plaintext), dup(aad))
+		got := aead.Seal(ciphertext, nonce, plaintext, aad)
+		if !bytes.Equal(want, got) {
+			t.Fatalf("expected %x, got %x", want, got)
+		}
+		got, err = aead.Open(got[:0], nonce, got, aad)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, orig) {
+			t.Fatalf("expected %x, got %x", orig, got)
+		}
+	}
+}
+
+// TestInvalidKey size tests that NewGCM rejects invalid key
+// lengths.
+func TestInvalidKeySize(t *testing.T) {
+	key := make([]byte, 64)
+	for i := range key {
+		if i == 16 || i == 32 {
+			continue
+		}
+		_, err := NewGCM(key[:i])
+		var kse aes.KeySizeError
+		if !errors.As(err, &kse) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
+// TestInvalidNonceSize tests calling Seal or Open with invalid
+// nonce lengths.
+func TestInvalidNonceSize(t *testing.T) {
+	t.Run("128", func(t *testing.T) {
+		testInvalidNonceSize(t, 16)
+	})
+	t.Run("256", func(t *testing.T) {
+		testInvalidNonceSize(t, 32)
+	})
+}
+
+func testInvalidNonceSize(t *testing.T, keySize int) {
+	test := func(t *testing.T, fn func([]byte)) {
+		err := quick.Check(func(nonce []byte) (ok bool) {
+			if len(nonce) == NonceSize {
+				return true
+			}
+			defer func() { ok = recover() != nil }()
+			fn(nonce)
+			return
+		}, &quick.Config{MaxCount: 1000})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	aead, _ := NewGCM(make([]byte, keySize))
+	t.Run("seal", func(t *testing.T) {
+		test(t, func(nonce []byte) {
+			aead.Seal(nil, nonce, nil, nil)
+		})
+	})
+	t.Run("open", func(t *testing.T) {
+		test(t, func(nonce []byte) {
+			aead.Open(nil, nonce, nil, nil)
+		})
+	})
 }
 
 // AES-GCM-SIV
