@@ -1,4 +1,4 @@
-//go:build (amd64 || arm64) && gc && !purego
+//go:build arm64 && gc && !purego
 
 package siv
 
@@ -33,9 +33,11 @@ func (a *aead) seal(out, nonce, plaintext, additionalData []byte) {
 	sum(tag, authKey[:16], nonce, plaintext, additionalData)
 	encryptBlockAsm(nr, &enc[0], &tag[0], &tag[0])
 
-	block := *tag
-	block[15] |= 0x80
-	aesctr(nr, &enc[0], &block, out, plaintext)
+	if len(plaintext) > 0 {
+		block := *tag
+		block[15] |= 0x80
+		aesctr(nr, &enc[0], &block, out, plaintext)
+	}
 }
 
 func (a *aead) open(out, nonce, ciphertext, tag, additionalData []byte) bool {
@@ -51,10 +53,12 @@ func (a *aead) open(out, nonce, ciphertext, tag, additionalData []byte) bool {
 	var enc [maxEncSize]uint32
 	expandKeyAsm(nr, &encKey[0], &enc[0])
 
-	var block [TagSize]byte
-	copy(block[:], tag)
-	block[15] |= 0x80
-	aesctr(nr, &enc[0], &block, out, ciphertext)
+	if len(ciphertext) > 0 {
+		var block [TagSize]byte
+		copy(block[:], tag)
+		block[15] |= 0x80
+		aesctr(nr, &enc[0], &block, out, ciphertext)
+	}
 
 	var wantTag [TagSize]byte
 	sum(&wantTag, authKey[:16], nonce, out, additionalData)
@@ -160,19 +164,16 @@ func sum(tag *[TagSize]byte, authKey, nonce, plaintext, additionalData []byte) {
 }
 
 func aesctr(nr int, enc *uint32, block *[TagSize]byte, dst, src []byte) {
-	ctr := binary.LittleEndian.Uint32(block[0:4])
-
-	var ks [blockSize]byte
-	for len(src) >= blockSize && len(dst) >= blockSize {
-		encryptBlockAsm(nr, enc, &ks[0], &block[0])
-		ctr++
-		binary.LittleEndian.PutUint32(block[0:4], ctr)
-		xorBlock((*[blockSize]byte)(dst), (*[blockSize]byte)(src), &ks)
-		dst = dst[blockSize:]
-		src = src[blockSize:]
+	n := len(src) / blockSize
+	if n > 0 {
+		aesctrAsm(nr, enc, block, &dst[0], &src[0], n)
+		dst = dst[n*blockSize:]
+		src = src[n*blockSize:]
 	}
-
 	if len(src) > 0 {
+		var ks [blockSize]byte
+		ctr := binary.LittleEndian.Uint32(block[0:4]) + uint32(n)
+		binary.LittleEndian.PutUint32(block[0:4], ctr)
 		encryptBlockAsm(nr, enc, &ks[0], &block[0])
 		xor(dst, src, ks[:], len(src))
 	}

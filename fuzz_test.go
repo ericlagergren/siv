@@ -83,10 +83,17 @@ func testTink(t *testing.T, keySize int) {
 
 		gotCt := gotAead.Seal(nil, nonce, plaintext, aad)
 		if !bytes.Equal(wantCt, gotCt) {
+			wantTag := wantCt[len(wantCt)-TagSize:]
+			gotTag := gotCt[len(gotCt)-TagSize:]
+			if !bytes.Equal(wantTag, gotTag) {
+				t.Fatalf("expected tag %x, got %x", wantTag, gotTag)
+			}
+			wantCt = wantCt[:len(wantCt)-TagSize]
+			gotCt = gotCt[:len(gotCt)-TagSize]
 			for i, c := range gotCt {
 				if c != wantCt[i] {
-					t.Fatalf("bad value at index %d of %d (%d): %#x",
-						i, len(wantCt), len(wantCt)-i, c)
+					t.Fatalf("bad value at index %d (block %d of %d): %#x",
+						i, i/blockSize, len(wantCt)/blockSize, c)
 				}
 			}
 			t.Fatalf("expected %#x, got %#x", wantCt, gotCt)
