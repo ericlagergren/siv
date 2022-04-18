@@ -17,6 +17,8 @@ import (
 	"testing/quick"
 
 	rand "github.com/ericlagergren/saferand"
+	tink "github.com/google/tink/go/aead/subtle"
+
 	"github.com/ericlagergren/siv/internal/subtle"
 )
 
@@ -26,6 +28,31 @@ func randbuf(n int) []byte {
 		panic(err)
 	}
 	return buf
+}
+
+func hex16(src []byte) string {
+	const hextable = "0123456789abcdef"
+
+	var dst strings.Builder
+	for i := 0; len(src) > TagSize; i++ {
+		if i > 0 && i%16 == 0 {
+			dst.WriteByte(' ')
+		}
+		v := src[0]
+		dst.WriteByte(hextable[v>>4])
+		dst.WriteByte(hextable[v&0x0f])
+		src = src[1:]
+	}
+	if dst.Len() > 0 {
+		dst.WriteByte(' ')
+	}
+	for len(src) > 0 {
+		v := src[0]
+		dst.WriteByte(hextable[v>>4])
+		dst.WriteByte(hextable[v&0x0f])
+		src = src[1:]
+	}
+	return dst.String()
 }
 
 func disableAsm(t *testing.T) {
@@ -38,17 +65,17 @@ func disableAsm(t *testing.T) {
 
 // runTests runs both generic and assembly tests.
 func runTests(t *testing.T, fn func(t *testing.T)) {
-	t.Run("generic", func(t *testing.T) {
-		t.Helper()
-		disableAsm(t)
-		fn(t)
-	})
 	if haveAsm {
 		t.Run("assembly", func(t *testing.T) {
 			t.Helper()
 			fn(t)
 		})
 	}
+	t.Run("generic", func(t *testing.T) {
+		t.Helper()
+		disableAsm(t)
+		fn(t)
+	})
 }
 
 // loadVectors reads test vectors from testdata/nameinto v.
@@ -350,6 +377,8 @@ func testRFC(t *testing.T, i int, tc testVector) {
 
 		ciphertext := aead.Seal(nil, tc.nonce, tc.plaintext, tc.aad)
 		if !bytes.Equal(ciphertext, tc.result) {
+			t.Logf("W: %q\n", hex16(tc.result))
+			t.Logf("G: %q\n", hex16(ciphertext))
 			t.Fatalf("#%d: expected %x, got %x", i, tc.result, ciphertext)
 		}
 
@@ -365,6 +394,75 @@ func testRFC(t *testing.T, i int, tc testVector) {
 		if !bytes.Equal(plaintext, tc.plaintext) {
 			t.Fatalf("#%d: expected %x, got %x", i, tc.plaintext, plaintext)
 		}
+	}
+}
+
+// TestMultiBlock tests the code paths that handle N blocks at
+// a time.
+func TestMultiBlock(t *testing.T) {
+	runTests(t, func(t *testing.T) {
+		t.Run("128", func(t *testing.T) {
+			testMultiBlock(t, 16)
+		})
+		t.Run("256", func(t *testing.T) {
+			testMultiBlock(t, 32)
+		})
+	})
+}
+
+func testMultiBlock(t *testing.T, keySize int) {
+	key := randbuf(keySize)
+	plaintext := randbuf((blockSize * 16) + blockSize/3)
+	aad := randbuf(773)
+
+	// TODO(eric): add test vectors to testdata instead of using
+	// Tink.
+	refAead, err := tink.NewAESGCMSIV(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonceAndCt, err := refAead.Encrypt(plaintext, aad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce := nonceAndCt[:NonceSize]
+	wantCt := nonceAndCt[NonceSize:]
+
+	gotAead, err := NewGCM(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gotCt := gotAead.Seal(nil, nonce, plaintext, aad)
+	if !bytes.Equal(wantCt, gotCt) {
+		wantTag := wantCt[len(wantCt)-TagSize:]
+		gotTag := gotCt[len(gotCt)-TagSize:]
+		if !bytes.Equal(wantTag, gotTag) {
+			t.Fatalf("expected tag %x, got %x", wantTag, gotTag)
+		}
+		wantCt = wantCt[:len(wantCt)-TagSize]
+		gotCt = gotCt[:len(gotCt)-TagSize]
+		t.Logf("W: %q\n", hex16(wantCt))
+		t.Logf("G: %q\n", hex16(gotCt))
+		for i, c := range gotCt {
+			if c != wantCt[i] {
+				t.Fatalf("bad value at index %d (block %d of %d): %#x",
+					i, i/blockSize, len(wantCt)/blockSize, c)
+			}
+		}
+		panic("unreachable")
+	}
+
+	wantPt, err := refAead.Decrypt(nonceAndCt, aad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotPt, err := gotAead.Open(nil, nonce, wantCt, aad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wantPt, gotPt) {
+		t.Fatalf("expected %#x, got %#x", wantPt, gotPt)
 	}
 }
 
@@ -388,8 +486,7 @@ func testOverlap(t *testing.T, keySize int) {
 			i, j int
 		}
 		const (
-			// max = 7789
-			max = 33
+			max = 7789
 		)
 		args := []arg{
 			{buf: randbuf(keySize), ptr: &key},

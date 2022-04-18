@@ -16,19 +16,7 @@ go get github.com/ericlagergren/siv@latest
 
 ## Performance
 
-The performance of HCTR2 is determined by two things: AES-CTR and
-POLYVAL. This module provides ARMv8 and x86-64 assembly AES-CTR
-implementations and uses a hardware-accelerated POLYVAL
-implementation (see [github.com/ericlagergren/polyval](https://pkg.go.dev/github.com/ericlagergren/polyval)).
-
-The ARMv8 assembly implementation of AES-CTR-256 with
-hardware-accelerated POLYVAL runs at about X cycle per byte.
-
-The x86-64 assembly implementation of AES-CTR-256 with
-hardware-accelerated POLYVAL runs at about X cycles per byte.
-
-The `crypto/aes` implementation of AES-CTR-256 with
-hardware-accelerated POLYVAL runs at about X cycles per byte.
+TBD
 
 ## Security
 
