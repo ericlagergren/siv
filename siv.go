@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"github.com/ericlagergren/polyval"
-	"github.com/ericlagergren/siv/internal/subtle"
+	"github.com/ericlagergren/subtle"
 	"golang.org/x/sys/cpu"
 )
 

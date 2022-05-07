@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 
 	"github.com/ericlagergren/polyval"
-	"github.com/ericlagergren/siv/internal/subtle"
+	"github.com/ericlagergren/subtle"
 )
 
 const (
