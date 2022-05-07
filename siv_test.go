@@ -19,7 +19,7 @@ import (
 	rand "github.com/ericlagergren/saferand"
 	tink "github.com/google/tink/go/aead/subtle"
 
-	"github.com/ericlagergren/siv/internal/subtle"
+	"github.com/ericlagergren/subtle"
 )
 
 func randbuf(n int) []byte {
