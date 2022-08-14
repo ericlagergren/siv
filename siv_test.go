@@ -12,14 +12,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 
 	rand "github.com/ericlagergren/saferand"
-	tink "github.com/google/tink/go/aead/subtle"
-
 	"github.com/ericlagergren/subtle"
+	"github.com/ericlagergren/testutil"
+	tink "github.com/google/tink/go/aead/subtle"
 )
 
 func randbuf(n int) []byte {
@@ -588,6 +590,32 @@ func testInvalidNonceSize(t *testing.T, keySize int) {
 			aead.Open(nil, nonce, nil, nil)
 		})
 	})
+}
+
+func TestInlining(t *testing.T) {
+	want := []string{
+		"dup",
+		"NewGCM",
+		"aead.NonceSize",
+		"aead.Overhead",
+	}
+	if version() >= 18 {
+		want = append(want, "xorBlock")
+	}
+	testutil.TestInlining(t, "github.com/ericlagergren/siv", want...)
+}
+
+func version() int {
+	s := runtime.Version()
+	s = strings.TrimPrefix(s, "go1.")
+	if i := strings.IndexByte(s, '.'); i > 0 {
+		s = s[:i]
+	}
+	x, err := strconv.Atoi(s)
+	if err != nil {
+		panic(err)
+	}
+	return x
 }
 
 // AES-GCM-SIV

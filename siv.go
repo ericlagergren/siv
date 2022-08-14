@@ -112,7 +112,7 @@ func (a *aead) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, erro
 	}
 	ok := a.open(out, nonce, ciphertext, tag, additionalData)
 	if !ok {
-		wipe(out)
+		subtle.Wipe(out)
 		return nil, errOpen
 	}
 	return ret, nil
@@ -157,9 +157,7 @@ func authGeneric(tag []byte, b cipher.Block, authKey, nonce, plaintext, addition
 	padS(p, plaintext)
 	p.Update(length)
 	p.Sum(tag[:0])
-	for i := range nonce {
-		tag[i] ^= nonce[i]
-	}
+	subtle.XORBytes(tag, tag, nonce)
 	tag[15] &= 0x7f
 	b.Encrypt(tag, tag)
 }
@@ -248,7 +246,7 @@ func aesctrGeneric(b cipher.Block, tag, dst, src []byte) {
 
 	if len(src) > 0 {
 		b.Encrypt(ks[:], block[:])
-		xor(dst, src, ks[:], len(src))
+		subtle.XORBytes(dst, src, ks[:])
 	}
 }
 
@@ -260,20 +258,4 @@ func xorBlock(z, x, y *[blockSize]byte) {
 	y1 := binary.LittleEndian.Uint64(y[8:])
 	binary.LittleEndian.PutUint64(z[0:], x0^y0)
 	binary.LittleEndian.PutUint64(z[8:], x1^y1)
-}
-
-// xor sets z = x^y for up to n bytes.
-func xor(z, x, y []byte, n int) {
-	// This loop condition prevents needless bounds checks.
-	for i := 0; i < n && i < len(z) && i < len(x) && i < len(y); i++ {
-		z[i] = x[i] ^ y[i]
-	}
-}
-
-//go:noinline
-func wipe(p []byte) {
-	for i := range p {
-		p[i] = 0
-	}
-	runtime.KeepAlive(p)
 }

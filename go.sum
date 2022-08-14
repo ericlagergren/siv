@@ -92,8 +92,10 @@ github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391 h1:8j2RH289R
 github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391/go.mod h1:K2R7GhgxrlJzHw2qiPWsCZXf/kXEJN9PLnQK73Ll0po=
 github.com/ericlagergren/saferand v0.0.0-20220206064634-960a4dd2bc5c h1:RUzBDdZ+e/HEe2Nh8lYsduiPAZygUfVXJn0Ncj5sHMg=
 github.com/ericlagergren/saferand v0.0.0-20220206064634-960a4dd2bc5c/go.mod h1:ETASDWf/FmEb6Ysrtd1QhjNedUU/ZQxBCRLh60bQ/UI=
-github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010 h1:fuGucgPk5dN6wzfnxl3D0D3rVLw4v2SbBT9jb4VnxzA=
-github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010/go.mod h1:JtBcj7sBuTTRupn7c2bFspMDIObMJsVK8TeUvpShPok=
+github.com/ericlagergren/subtle v0.0.0-20220814022531-5b12fc128823 h1:Tck38aaf6vBeE4sTdlsShSfyJTuMke4UzbtPAuRW1WE=
+github.com/ericlagergren/subtle v0.0.0-20220814022531-5b12fc128823/go.mod h1:JtBcj7sBuTTRupn7c2bFspMDIObMJsVK8TeUvpShPok=
+github.com/ericlagergren/testutil v0.0.0-20220814024112-d21c9429edc2 h1:j9adob+s2qXdvdeJywrVifDfHAIq0XwoaK/0q4D1BGw=
+github.com/ericlagergren/testutil v0.0.0-20220814024112-d21c9429edc2/go.mod h1:E4aJHbNMb6zjyVd1Mrpf3FIJ6kAtnVUq2yl0T6DHZ/I=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/structs v1.1.0/go.mod h1:9NiDSp5zOcgEDl+j00MP/WkGVPOlPRLejGD8Ga6PJ7M=
 github.com/franela/goblin v0.0.0-20200105215937-c9ffbefa60db/go.mod h1:7dvUGVsVBjqR7JHJk0brhHOZYGmfBYOrK0ZhYMEtBr4=

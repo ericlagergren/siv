@@ -6,7 +6,8 @@ require github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391
 
 require (
 	github.com/ericlagergren/saferand v0.0.0-20220206064634-960a4dd2bc5c
-	github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010
+	github.com/ericlagergren/subtle v0.0.0-20220814022531-5b12fc128823
+	github.com/ericlagergren/testutil v0.0.0-20220814024112-d21c9429edc2
 	github.com/google/tink/go v1.6.1
 	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f
 )
