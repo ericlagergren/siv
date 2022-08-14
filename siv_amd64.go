@@ -178,6 +178,6 @@ func aesctr(nr int, enc *uint32, block *[TagSize]byte, dst, src []byte) {
 
 	if len(src) > 0 {
 		encryptBlockAsm(nr, enc, &ks[0], &block[0])
-		xor(dst, src, ks[:], len(src))
+		subtle.XORBytes(dst, src, ks[:])
 	}
 }

@@ -175,6 +175,6 @@ func aesctr(nr int, enc *uint32, block *[TagSize]byte, dst, src []byte) {
 		ctr := binary.LittleEndian.Uint32(block[0:4]) + uint32(n)
 		binary.LittleEndian.PutUint32(block[0:4], ctr)
 		encryptBlockAsm(nr, enc, &ks[0], &block[0])
-		xor(dst, src, ks[:], len(src))
+		subtle.XORBytes(dst, src, ks[:])
 	}
 }
